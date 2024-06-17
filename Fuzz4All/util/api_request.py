@@ -3,19 +3,25 @@ import signal
 import time
 
 import openai
+from grazie.api.client.chat.prompt import ChatPrompt
+from grazie.api.client.endpoints import GrazieApiGatewayUrls
+from grazie.api.client.gateway import GrazieApiGatewayClient, AuthType
+from grazie.api.client.llm_parameters import LLMParameters
+from grazie.api.client.parameters import Parameters
+from grazie.api.client.profiles import Profile
 
-openai.api_key = os.environ.get("OPENAI_API_KEY", "dummy")
-client = openai.OpenAI()
+# openai.api_key = os.environ.get("OPENAI_API_KEY", "dummy")
+# client = openai.OpenAI()
 
 
 def create_openai_config(
-    prompt,
-    engine_name="code-davinci-002",
-    stop=None,
-    max_tokens=200,
-    top_p=1,
-    n=1,
-    temperature=0,
+        prompt,
+        engine_name="code-davinci-002",
+        stop=None,
+        max_tokens=200,
+        top_p=1,
+        n=1,
+        temperature=0,
 ):
     return {
         "engine": engine_name,
@@ -30,11 +36,11 @@ def create_openai_config(
 
 
 def create_config(
-    prev: dict,
-    messages: list,
-    max_tokens: int,
-    temperature: float = 2,
-    model: str = "gpt-3.5-turbo",
+        prev: dict,
+        messages: str,
+        max_tokens: int,
+        temperature: float = 2,
+        model: str = "gpt-3.5-turbo",
 ):
     if prev == {}:
         return {
@@ -52,30 +58,65 @@ def handler(signum, frame):
     raise Exception("I have become end of time")
 
 
-# Handles requests to OpenAI API
 def request_engine(config):
     ret = None
+
+
+    token = os.getenv("GRAZIE_JWT_TOKEN")
+
+    client = GrazieApiGatewayClient(
+        url=GrazieApiGatewayUrls.STAGING,
+        grazie_jwt_token=token,
+        auth_type=AuthType.APPLICATION,
+    )
+
     while ret is None:
         try:
             signal.signal(signal.SIGALRM, handler)
             signal.alarm(120)  # wait 10
-            ret = client.chat.completions.create(**config)
+            ret = client.chat(
+                chat=(
+                    ChatPrompt()
+                    .add_user(config["messages"])
+                ),
+                profile=Profile.OPENAI_GPT_4,
+                prompt_id="Fuzz4All-gpt4-try",
+                parameters={
+                    LLMParameters.Temperature: Parameters.FloatValue(config["temperature"]),
+                    LLMParameters.Length: config["max_tokens"],
+                }
+            )
             signal.alarm(0)
-        except openai._exceptions.BadRequestError as e:
-            print(e)
-            signal.alarm(0)
-        except openai._exceptions.RateLimitError as e:
-            print("Rate limit exceeded. Waiting...")
-            print(e)
-            signal.alarm(0)  # cancel alarm
-            time.sleep(5)
-        except openai._exceptions.APIConnectionError as e:
-            print("API connection error. Waiting...")
-            signal.alarm(0)  # cancel alarm
-            time.sleep(5)
         except Exception as e:
             print(e)
-            print("Unknown error. Waiting...")
             signal.alarm(0)  # cancel alarm
-            time.sleep(1)
+            time.sleep(5)
     return ret
+
+# Handles requests to OpenAI API
+# def request_engine(config):
+#     ret = None
+#     while ret is None:
+#         try:
+#             signal.signal(signal.SIGALRM, handler)
+#             signal.alarm(120)  # wait 10
+#             ret = client.chat.completions.create(**config)
+#             signal.alarm(0)
+#         except openai._exceptions.BadRequestError as e:
+#             print(e)
+#             signal.alarm(0)
+#         except openai._exceptions.RateLimitError as e:
+#             print("Rate limit exceeded. Waiting...")
+#             print(e)
+#             signal.alarm(0)  # cancel alarm
+#             time.sleep(5)
+#         except openai._exceptions.APIConnectionError as e:
+#             print("API connection error. Waiting...")
+#             signal.alarm(0)  # cancel alarm
+#             time.sleep(5)
+#         except Exception as e:
+#             print(e)
+#             print("Unknown error. Waiting...")
+#             signal.alarm(0)  # cancel alarm
+#             time.sleep(1)
+#     return ret

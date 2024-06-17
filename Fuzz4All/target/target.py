@@ -171,13 +171,15 @@ class Target(object):
             # first run with temperature 0.0 to get the first prompt
             config = create_config(
                 {},
-                self._create_auto_prompt_message(message),
+                # self._create_auto_prompt_message(message),
+                message + "\n" + self.AP_INSTRUCTION,
                 max_tokens=500,
                 temperature=0.0,
-                model="gpt-4",
+                model="gpt-3.5-turbo",
             )
             response = request_engine(config)
-            greedy_prompt = self.wrap_prompt(response.choices[0].message.content)
+            self.m_logger.logo("It works!!!!!", level=LEVEL.INFO)
+            greedy_prompt = self.wrap_prompt(response.content)
             with open(
                 self.folder + "/prompts/greedy_prompt.txt", "w", encoding="utf-8"
             ) as f:
@@ -190,13 +192,14 @@ class Target(object):
             for i in track(range(3), description="Generating prompts..."):
                 config = create_config(
                     {},
-                    self._create_auto_prompt_message(message),
+                    # self._create_auto_prompt_message(message),
+                    message + "\n" + self.AP_INSTRUCTION,
                     max_tokens=500,
                     temperature=1,
-                    model="gpt-4",
+                    model="gpt-3.5-turbo",
                 )
                 response = request_engine(config)
-                prompt = self.wrap_prompt(response.choices[0].message.content)
+                prompt = self.wrap_prompt(response.content)
                 with open(
                     self.folder + "/prompts/prompt_{}.txt".format(i),
                     "w",
