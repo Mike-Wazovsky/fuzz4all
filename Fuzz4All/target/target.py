@@ -2,13 +2,14 @@ import glob
 import os
 import random
 import time
+from collections import deque
 from enum import Enum
-from typing import Any, Dict, List, Tuple, Union
+from typing import Any, Dict, List, Union
 
 import torch
 from rich.progress import track
 
-from Fuzz4All.model import make_model
+from Fuzz4All.models.model import make_model
 from Fuzz4All.util.api_request import create_config, request_engine
 from Fuzz4All.util.Logger import LEVEL, Logger
 
@@ -38,7 +39,9 @@ class Target(object):
         self.max_length = kwargs["max_length"]
         self.device = kwargs["device"]
         self.model_name = kwargs["model_name"]
+        self.clip_chance = 0.01
         self.model = None
+        self.gpt4_o = None
         # loggers
         self.g_logger = Logger(self.folder, "log_generation.txt", level=kwargs["level"])
         self.v_logger = Logger(self.folder, "log_validation.txt", level=kwargs["level"])
@@ -58,6 +61,8 @@ class Target(object):
         self.prompt = None
         self.initial_prompt = None
         self.prev_example = None
+        self.new_codes = deque()
+        self.gen_gpt = False
         # prompt strategies
         self.se_prompt = self.wrap_in_comment(
             "Please create a semantically equivalent program to the previous "
@@ -178,7 +183,6 @@ class Target(object):
                 model="gpt-3.5-turbo",
             )
             response = request_engine(config)
-            self.m_logger.logo("It works!!!!!", level=LEVEL.INFO)
             greedy_prompt = self.wrap_prompt(response.content)
             with open(
                 self.folder + "/prompts/greedy_prompt.txt", "w", encoding="utf-8"
@@ -252,6 +256,14 @@ class Target(object):
             model_name=model_name,
             device=self.device,
             max_length=self.max_length,
+            gpt_chance=0.1
+        )
+        self.gpt4_o = make_model(
+            eos=eos,
+            model_name="gpt4-o",
+            device=self.device,
+            max_length=self.max_length,
+            gpt_chance=0.1
         )
         self.m_logger.logo("Model Loaded", level=LEVEL.INFO)
         self.initial_prompt = self.auto_prompt(
@@ -264,12 +276,25 @@ class Target(object):
         self.m_logger.logo("Done", level=LEVEL.INFO)
 
     def generate_model(self) -> List[str]:
+        print("GENERATE!!")
         self.g_logger.logo(self.prompt, level=LEVEL.VERBOSE)
         return self.model.generate(
             self.prompt,
             batch_size=self.batch_size,
             temperature=self.temperature,
             max_length=1024,
+        )
+
+    def code_clipping(self, code: str) -> str:
+        print("clip code")
+        with open("Fuzz4All/target/code_clip.txt", "r") as clip_file:
+            text = clip_file.read()
+        self.g_logger.logo(self.prompt, level=LEVEL.VERBOSE)
+        return self.gpt4_o.generate(
+            code + "\n" + text,
+            batch_size=1,
+            temperature=self.temperature,
+            max_length=1024
         )
 
     # generation
@@ -306,8 +331,10 @@ class Target(object):
         raise NotImplementedError
 
     def update_strategy(self, new_code: str) -> str:
+        new_code =  self.code_clipping(new_code) if (random.random() < self.clip_chance) else new_code
         while 1:
-            strategy = random.randint(0, self.p_strategy)
+            strategy = random.randint(0, self.p_strategy) # TODO(чё это за хуйня?)
+            # strategy = 0
             # generate new code using separator
             if strategy == 0:
                 return f"\n{new_code}\n{self.prompt_used['separator']}\n"
@@ -340,6 +367,33 @@ class Target(object):
                 + "\n"
             )
             self.prev_example = new_code
+    # def update(self, **kwargs):
+    #     new_code = ""
+    #     for result, code in kwargs["prev"]:
+    #         if (
+    #             result == FResult.SAFE  # TODO(ipip ip)
+    #             and self.filter(code)
+    #             and self.clean_code(code) != self.prev_example
+    #         ):
+    #             self.new_codes.append(self.clean_code(code))
+    #
+    #     if len(self.new_codes):
+    #         new_code = self.new_codes.popleft()
+    #
+    #     if new_code != "" and self.p_strategy != -1:
+    #         self.m_logger.logo(
+    #             "Update prompt\n", level=LEVEL.INFO
+    #         )
+    #         self.prompt = (
+    #             self.initial_prompt
+    #             + self.update_strategy(new_code)
+    #             + self.prompt_used["begin"]
+    #             + "\n"
+    #         )
+    #         self.m_logger.logo(
+    #             "New prompt:\n" + self.prompt, level=LEVEL.INFO
+    #         )
+    #         self.prev_example = new_code
 
     # validation
     def validate_individual(self, filename) -> (FResult, str):

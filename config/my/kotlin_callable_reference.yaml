@@ -6,7 +6,7 @@ fuzzing:
   # where to store the results (relative to the where you are calling fuzz.py)
   output_folder: ../fastd/fuzzall/FuzzAll/experiment/full_run/cpp/run
   # number of fuzzing iterations
-  num: 20
+  num: 200
   # total fuzzing time in hours
   total_time: 24
   # level of logging: 1 = INFO, 2 = TRACE, 3 = VERBOSE
@@ -30,25 +30,25 @@ fuzzing:
   # 1: mutate existing code
   # 2: semantically equivalent code generation
   # 3: combine previous two code generations
-  prompt_strategy: 1
+  prompt_strategy: 3
 
 
 # --------------------------------------------------------------------------- #
 # Configuration of the target system
 target:
   # language to fuzz, currently supported: cpp, smt2, java, go
-  language: java
+  language: kotlin
   # path to documentation of the feature of the target system
   # (Relative to the root of the fuzzing framework)
-  path_documentation: config/documentation/java/java_std.md
+  path_documentation: config/documentation/kotlin/kotlin_callable_reference.md
   # path to the example code using the feature of the target system
   # (Relative to the root of the fuzzing framework)
   path_example_code:
   # path to the command to push the llm to generate the input for the
   # target system using the given feature
-  trigger_to_generate_input: "/* Please create a very short program which uses new Java features in a complex way. Start and end the code block with quotation marks ``` */"
+  trigger_to_generate_input: "/* Please create a very short program which uses Kotlin callable reference in a complex way. Start and end the code block with quotation marks ``` */"
   # hint to give to the llm to generate the input for the target system
-  input_hint: "import java.lang.Object;"
+  input_hint: "import kotlin.Any"
   # path to the hand-written prompt to give to the llm
   # (Relative to the root of the fuzzing framework)
   path_hand_written_prompt:
@@ -63,7 +63,7 @@ llm:
   # temperature to query the LLM model when generating output.
   temperature: 1
   # batch size
-  batch_size: 30
+  batch_size: 3
   # use hardware acceleration (GPU) for the LLM model
   device: cuda
   # model name according to the HuggingFace model hub

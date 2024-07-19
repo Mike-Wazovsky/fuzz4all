@@ -11,7 +11,7 @@ from Fuzz4All.util.Logger import LEVEL
 from Fuzz4All.util.util import comment_remover
 
 
-class JAVATarget(Target):
+class KotlinTarget(Target):
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
         if kwargs["template"] == "fuzzing_with_config_file":
@@ -28,7 +28,7 @@ class JAVATarget(Target):
                     f.write(code)
             except:
                 pass
-        return "/tmp/temp{}.java".format(self.CURRENT_TIME)
+        return "/tmp/temp{}.kt".format(self.CURRENT_TIME)
 
     def wrap_prompt(self, prompt: str) -> str:
         return f"/* {prompt} */\n{self.prompt_used['separator']}\n{self.prompt_used['begin']}"
@@ -45,7 +45,6 @@ class JAVATarget(Target):
     def clean(self, code: str) -> str:
         code = self.extract_java_code(code)
         code = comment_remover(code)
-        # code = self.add_imports(code)
         return code
 
     def clean_code(self, code: str) -> str:
@@ -58,13 +57,7 @@ class JAVATarget(Target):
                 if line.strip() != "" and line.strip() != self.prompt_used["begin"]
             ]
         )
-        # code = self.add_imports(code)
         return code
-
-    def add_imports(self, code: str):
-        with open("Fuzz4All/target/JAVA/imports.txt", "r", encoding="utf-8") as f:
-            imports = f.read()
-        return imports + code
 
     def extract_java_code(self, code: str):
         # pattern = re.compile(r'```\n(.*?)\n```', re.DOTALL)
@@ -78,26 +71,14 @@ class JAVATarget(Target):
 
     # If there exists a public class, ensure file name matches
     def determine_file_name(self, code):
-        public_class_name = search("\s*public(\s)+class(\s)+([^\s\{]+)", code)
-        if public_class_name is None:
-            # No public class found, return standard write back file name
-            return "/tmp/temp{}.java".format(self.CURRENT_TIME)
-
-        # check if folder exists
-        if not os.path.exists("/tmp/temp{}".format(self.CURRENT_TIME)):
-            os.mkdir("/tmp/temp{}".format(self.CURRENT_TIME))
-
-        # Public class is found, ensure that file name matches public class name
-        return "/tmp/temp{0}/{1}.java".format(
-            self.CURRENT_TIME, public_class_name[0].split()[-1]
-        )
+        # return standard write back file name
+        return "/tmp/temp{}.kt".format(self.CURRENT_TIME)
 
     def validate_individual(self, filename) -> (FResult, str):
         write_back_name = ""
         try:
             with open(filename, "r", encoding="utf-8") as f:
                 code = f.read()
-
                 write_back_name = self.determine_file_name(code)
                 self.write_back_file(code, write_back_name=write_back_name)
         except:
@@ -105,11 +86,12 @@ class JAVATarget(Target):
 
         try:
             exit_code = subprocess.run(
-                f"{self.target_name} --source 22 --enable-preview --target 22 {write_back_name}",
+                # f"{self.target_name} --source 22 --enable-preview --target 22 {write_back_name}",
+                f"{self.target_name} {write_back_name} -d out",
                 shell=True,
                 capture_output=True,
                 encoding="utf-8",
-                timeout=5,
+                timeout=20,
                 text=True,
             )
         except subprocess.TimeoutExpired as te:

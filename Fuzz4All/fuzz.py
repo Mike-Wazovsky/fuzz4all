@@ -2,6 +2,7 @@
 
 import os
 import time
+import re
 
 import click
 from rich.traceback import install
@@ -37,6 +38,7 @@ def fuzz(
     resume: bool,
     otf: bool,
 ):
+    all_time_st = time.time()
     target.initialize()
     with Progress(
         TextColumn("Fuzzing • [progress.percentage]{task.percentage:>3.0f}%"),
@@ -48,6 +50,7 @@ def fuzz(
         task = p.add_task("Fuzzing", total=number_of_iterations)
         count = 0
         start_time = time.time()
+        val_time = 0
 
         if resume:
             n_existing = [
@@ -73,17 +76,43 @@ def fuzz(
                 continue
             prev = []
             for index, fo in enumerate(fos):
+                # fo = extract_java_code(fo)
                 file_name = os.path.join(output_folder, f"{count}.fuzz")
                 write_to_file(fo, file_name)
                 count += 1
                 p.update(task, advance=1)
                 # validation on the fly
                 if otf:
+                    val_time_st = time.time()
+
                     f_result, message = target.validate_individual(file_name)
                     target.parse_validation_message(f_result, message, file_name)
                     prev.append((f_result, fo))
-            target.update(prev=prev)
 
+                    val_time_end = time.time()
+                    val_time += val_time_end - val_time_st
+            target.update(prev=prev)
+    all_time_end = time.time()
+    all_time = all_time_end - all_time_st
+
+    print(f"All time: {all_time} sec")
+    print(f"Validation time: {val_time} sec")
+
+
+# TODO(это должно происходить в таргете)
+def add_imports(code: str):
+    with open("Fuzz4All/target/JAVA/imports.txt", "r", encoding="utf-8") as f:
+        imports = f.read()
+    return imports + code
+
+def extract_kotlin_code(text):
+    pattern = re.compile(r'```kotlin\n(.*?)\n```', re.DOTALL)
+    match = pattern.search(text)
+
+    if match:
+        return match.group(1)
+    else:
+        return text
 
 # evaluate against the oracle to discover any potential bugs
 # used after the generation
