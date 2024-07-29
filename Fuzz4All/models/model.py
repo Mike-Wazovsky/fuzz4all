@@ -76,12 +76,10 @@ class StarCoder:
         self.tokenizer = AutoTokenizer.from_pretrained(
             "/Users/ravsemirnov/Desktop/F4All/bigcode",
             local_files_only=True,
-            # checkpoint, token='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'
         )
         self.model = (
             AutoModelForCausalLM.from_pretrained(
                 # "/Users/ravsemirnov/Desktop/F4All/bigcode",
-                checkpoint, token='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',
                 trust_remote_code=True,
             )
             .to(torch.bfloat16)

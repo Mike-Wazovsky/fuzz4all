@@ -1,0 +1,9 @@
+This code has been iterated upon several times. Unfortunately, not everyone who modifies the code does so correctly.
+Sometimes, new variations are written on top of existing ones, leading to redundancy and bloat.
+
+Please review the code and identify any superfluous or outdated sections.
+Remove anything unnecessary, ensuring that the code remains functional and compiles correctly after your changes.
+Make any necessary corrections to achieve this.
+
+For example if you see "result 5", "result 6" you should delete all previous "result" leaving only few of them. The same with "main" or anything else.
+If you see some blocks of code which seems similar or copy each over delete the duplications.
