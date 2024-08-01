@@ -1,19 +1,12 @@
-import os
-import re
-import subprocess
 import glob
+import subprocess
 import time
 from enum import Enum
-from pathlib import Path
-from re import search
-from typing import List, Union
 
 from rich.progress import track
 
 from Fuzz4All.target.target import FResult
 from Fuzz4All.util.Logger import LEVEL, Logger
-
-from Fuzz4All.util.util import comment_remover
 
 
 class CompResult(Enum):
@@ -33,9 +26,9 @@ class KotlinComp():
         # main logger for system messages
         self.m_logger = Logger(self.folder, "log.txt")
         if "target_name_1" in kwargs:
-            self.target_name = kwargs["target_name_1"]
+            self.target_name_1 = kwargs["target_name_1"]
         if "target_name_2" in kwargs:
-            self.target_name = kwargs["target_name_2"]
+            self.target_name_2 = kwargs["target_name_2"]
 
     def write_back_file(self, code, write_back_name=""):
         if write_back_name != "":
@@ -77,7 +70,7 @@ class KotlinComp():
 
         try:
             exit_code_1 = subprocess.run(
-                f"{self.target_name} {write_back_name} -d out",
+                f"{self.target_name_1} {write_back_name} -d out",
                 shell=True,
                 capture_output=True,
                 encoding="utf-8",
@@ -86,7 +79,7 @@ class KotlinComp():
             )
 
             exit_code_2 = subprocess.run(
-                f"{self.target_name} {write_back_name} -d out",
+                f"{self.target_name_2} {write_back_name} -d out",
                 shell=True,
                 capture_output=True,
                 encoding="utf-8",
