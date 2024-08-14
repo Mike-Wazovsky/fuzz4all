@@ -6,3 +6,5 @@ click~=8.1.7
 transformers~=4.41.2
 setuptools~=65.5.1
 numpy<2.0
+matplotlib~=3.9.1
+xmltodict~=0.13.0

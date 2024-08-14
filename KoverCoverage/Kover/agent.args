@@ -1,1 +1,2 @@
 report.file=KoverCoverage/Kover/kover-kotlin-report.ic
+report.append=true

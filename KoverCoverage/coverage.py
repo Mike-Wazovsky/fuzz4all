@@ -3,7 +3,6 @@ import json
 import os
 import shutil
 import subprocess
-from collections import defaultdict
 
 import matplotlib.pyplot as plt
 import xmltodict
@@ -16,6 +15,7 @@ def main():
 
     parser.add_argument("compiler", type=str, help="The target parameter for the coverage function")
     parser.add_argument("source", type=str, help="The folder parameter for the coverage function")
+    parser.add_argument("output", type=str, help="output folder")
     parser.add_argument("size", type=int, default=-1, help="The number of .fuzz files")
     parser.add_argument("--scope", type=int, default=100,
                         help="The scope parameter for the coverage function (default: 100)")
@@ -24,10 +24,10 @@ def main():
 
     args = parser.parse_args()
 
-    coverage(args.compiler, args.source, args.scope, args.size, args.restart)
+    coverage(args.compiler, args.source, args.output, args.scope, args.size, args.restart)
 
 
-def coverage(compiler: str, source: str, scope: int, size: int, restart: bool):
+def coverage(compiler: str, source: str, output: str, scope: int, size: int, restart: bool):
     global iter
     target_dir = "KoverCoverage/Kover/kotlinc_tmp"
     json_dir = "KoverCoverage/Kover/experiment.json"
@@ -44,10 +44,12 @@ def coverage(compiler: str, source: str, scope: int, size: int, restart: bool):
     x_axis = [0] if not restart else restore_experiment_state('x_axis', json_dir)
 
     try:
-        #добавить опцию JAVA_OPT
-        os.environ["JAVA_OPTS"] = "-javaagent:KoverCoverage/Kover/kover-jvm-agent-0.8.3.jar=file:KoverCoverage/Kover/agent.args"
+        # добавить опцию JAVA_OPT
+        # os.environ["JAVA_OPTS"] = "-javaagent:KoverCoverage/Kover/kover-jvm-agent-0.8.3.jar=file:KoverCoverage/Kover/agent.args"
+        os.environ["JAVA_OPTS"] = \
+        "-javaagent:KoverCoverage/Kover/sources/kover-jvm-agent-0.8.4-SNAPSHOT.jar=file:KoverCoverage/Kover/agent.args"
 
-        #создать копию kotlin target
+        # создать копию kotlin target
         if not restart:
             delete("KoverCoverage/Kover/kover-kotlin-report.ic")
             delete("KoverCoverage/Kover/data.xml")
@@ -61,27 +63,32 @@ def coverage(compiler: str, source: str, scope: int, size: int, restart: bool):
                 except Exception as e:
                     print(f"Error occurred during copying of target: {e}")
 
-        #Прогнать запуски kotlin target
+        # Прогнать запуски kotlin target
         for iter in range(start_iter, size):
             if iter % scope == 0 and iter > x_axis[-1]:
                 res = read_coverage(target_dir)
                 for key, value in res.items():
                     graphs[key].append(int(value))
                 x_axis.append(iter)
+                save_ic(output, iter)
+            save_experiment_state(iter, graphs, x_axis, json_dir)
 
+            # file_path = os.path.join(source, f"{9999}.fuzz")
             file_path = os.path.join(source, f"{iter}.fuzz")
             print(f"run {iter}.fuzz")
             # if (iter == 6):
             #     raise Exception(f"RANDOM ERROR!!!!!!!")
             target.run_individual(file_path)
 
-        #Снять результат
-        # res = read_coverage(target_dir)
-        # for key, value in res.items():
-        #     graphs[key].append(int(value))
-        #     x_axis.append(size)
+        # Снять результат
+        res = read_coverage(target_dir)
+        for key, value in res.items():
+            graphs[key].append(int(value))
+        x_axis.append(iter)
+        save_ic(output, iter)
+        save_experiment_state(iter, graphs, x_axis, json_dir)
 
-        #Построить графики
+        # Построить графики
         for key, values in graphs.items():
             fig, ax = plt.subplots()
             ax.plot(x_axis, values, label=key)
@@ -91,7 +98,6 @@ def coverage(compiler: str, source: str, scope: int, size: int, restart: bool):
             ax.legend()
 
             plt.show()
-
 
         # убрать опцию JAVA_OPT + удалить директорию kotlinc
         save_experiment_state(iter, graphs, x_axis, json_dir)
@@ -107,14 +113,14 @@ def coverage(compiler: str, source: str, scope: int, size: int, restart: bool):
         raise e
 
 
-
 def read_coverage(target_dir: str) -> dict[str, int]:
     print(f"run xml")
     xml_path = "KoverCoverage/Kover/data.xml"
+    html_path = "html_dir_check"
     command = [
         "java",
         "-jar",
-        "KoverCoverage/Kover/kover-cli-0.8.4-SNAPSHOT.jar",
+        "KoverCoverage/Kover/sources/kover-cli-0.8.4-SNAPSHOT.jar",
         "report",
         "KoverCoverage/Kover/kover-kotlin-report.ic",
         "--classfiles",
@@ -125,13 +131,29 @@ def read_coverage(target_dir: str) -> dict[str, int]:
         xml_path
     ]
 
+    command_html = [
+        "java",
+        "-jar",
+        "KoverCoverage/Kover/sources/kover-cli-0.8.4-SNAPSHOT.jar",
+        "report",
+        "KoverCoverage/Kover/kover-kotlin-report.ic",
+        "--classfiles",
+        os.path.join(target_dir, "lib/kotlin-compiler.jar"),
+        "--src",
+        "src/main/kotlin",
+        "--html",
+        html_path
+    ]
+
     try:
-        result = subprocess.run(command, check=True, capture_output=True, text=True)
+        subprocess.run(command, check=True, capture_output=True, text=True)
+        subprocess.run(command_html, check=True, capture_output=True, text=True)
     except subprocess.CalledProcessError as e:
         print("Произошла ошибка при выполнении команды:")
         print(e.stderr)
 
     return parse_xml(xml_path)
+
 
 def parse_xml(xml_path) -> dict[str, int]:
     res = {}
@@ -140,6 +162,20 @@ def parse_xml(xml_path) -> dict[str, int]:
         res = {x['@type']: x['@covered'] for x in data['report']['counter']}
     print(res)
     return res
+
+
+def save_ic(output, iter):
+    command = [
+        "mv",
+        "KoverCoverage/Kover/kover-kotlin-report.ic",
+        os.path.join(output, f'kover-kotlin-report-{iter}.ic')
+    ]
+
+    try:
+        result = subprocess.run(command, check=True, capture_output=True, text=True)
+    except subprocess.CalledProcessError as e:
+        print("Произошла ошибка при выполнении команды:")
+        print(e.stderr)
 
 
 def delete(path: str):
