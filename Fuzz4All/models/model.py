@@ -149,6 +149,8 @@ def make_model(eos: List, model_name: str, device: str, max_length: int, gpt_cha
         model_obj = StarCoder(model_name, device, eos, max_length)
     elif "llama" in model_name.lower():
         model_obj = Grazie(Profile.GRAZIE_CHAT_LLAMA_V2_13b, device, eos, max_length, gpt_chance)
+    elif "mini" in model_name.lower():
+        model_obj = Grazie(Profile.OPENAI_GPT_4_O_MINI, device, eos, max_length, 0)
     elif "gpt4" in model_name.lower():
         model_obj = Grazie(Profile.OPENAI_GPT_4_TURBO, device, eos, max_length, gpt_chance)
 

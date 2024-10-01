@@ -63,7 +63,7 @@ llm:
   # temperature to query the LLM model when generating output.
   temperature: 1
   # batch size
-  batch_size: 3
+  batch_size: 10
   # use hardware acceleration (GPU) for the LLM model
   device: cuda
   # model name according to the HuggingFace model hub

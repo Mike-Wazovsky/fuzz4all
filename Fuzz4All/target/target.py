@@ -1,4 +1,5 @@
 import glob
+import json
 import os
 import random
 import time
@@ -10,8 +11,8 @@ import torch
 from rich.progress import track
 
 from Fuzz4All.models.model import make_model
-from Fuzz4All.util.api_request import create_config, request_engine
 from Fuzz4All.util.Logger import LEVEL, Logger
+from Fuzz4All.util.api_request import create_config, request_engine
 
 
 class FResult(Enum):
@@ -59,7 +60,7 @@ class Target(object):
         self.no_input_prompt = kwargs["no_input_prompt"]
         self.prompt_used = None
         self.prompt = None
-        self.initial_prompt = None
+        self.initial_prompt = ""
         self.prev_example = None
         self.new_codes = deque()
         self.gen_gpt = False
@@ -276,7 +277,6 @@ class Target(object):
         self.m_logger.logo("Done", level=LEVEL.INFO)
 
     def generate_model(self) -> List[str]:
-        print("GENERATE!!")
         self.g_logger.logo(self.prompt, level=LEVEL.VERBOSE)
         return self.model.generate(
             self.prompt,
@@ -286,7 +286,6 @@ class Target(object):
         )
 
     def code_clipping(self, code: str) -> str:
-        print("clip code")
         with open("Fuzz4All/target/code_clip.txt", "r") as clip_file:
             text = clip_file.read()
         self.g_logger.logo(self.prompt, level=LEVEL.VERBOSE)
@@ -331,23 +330,51 @@ class Target(object):
         raise NotImplementedError
 
     def update_strategy(self, new_code: str) -> str:
-        new_code =  self.code_clipping(new_code) if (random.random() < self.clip_chance) else new_code
-        while 1:
-            strategy = random.randint(0, self.p_strategy) # TODO(чё это за хуйня?)
-            # strategy = 0
-            # generate new code using separator
-            if strategy == 0:
-                return f"\n{new_code}\n{self.prompt_used['separator']}\n"
-            # mutate existing code
-            elif strategy == 1:
-                return f"\n{new_code}\n{self.m_prompt}\n"
-            # semantically equivalent code generation
-            elif strategy == 2:
-                return f"\n{new_code}\n{self.se_prompt}\n"
-            # combine previous two code generations
+        # define strategy
+        new_code = self.code_clipping(new_code) if (random.random() < self.clip_chance) else new_code
+        strategy = random.randint(0, self.p_strategy)
+
+        # make a request for given strategy
+        if strategy == 0:
+            result = f"\n{new_code}\n{self.prompt_used['separator']}\n"
+            strategy_name = "separator"
+        elif strategy == 1:
+            result = f"\n{new_code}\n{self.m_prompt}\n"
+            strategy_name = "mutate"
+        elif strategy == 2:
+            result = f"\n{new_code}\n{self.se_prompt}\n"
+            strategy_name = "semantic_equivalent"
+        else:
+            if self.prev_example is not None:
+                result = f"\n{self.prev_example}\n{self.prompt_used['separator']}\n{self.prompt_used['begin']}\n{new_code}\n{self.c_prompt}\n"
+                strategy_name = "combine"
             else:
-                if self.prev_example is not None:
-                    return f"\n{self.prev_example}\n{self.prompt_used['separator']}\n{self.prompt_used['begin']}\n{new_code}\n{self.c_prompt}\n"
+                result = ""
+                strategy_name = "none"
+
+        # write a result and straegy into JSON
+        if result is not None:
+            statistics_entry = {"strategy": strategy_name, "result": result}
+
+            if os.path.exists('statistics.json'):
+                with open('statistics.json', 'r+') as file:
+                    try:
+                        data = json.load(file)
+                    except json.JSONDecodeError:
+                        data = {}
+
+                    if "iterations" not in data:
+                        data["iterations"] = []
+
+                    data["iterations"].append(statistics_entry)
+                    file.seek(0)
+                    json.dump(data, file, indent=4)
+            else:
+                with open('statistics.json', 'w') as file:
+                    data = {"iterations": [statistics_entry]}
+                    json.dump(data, file, indent=4)
+
+        return result
 
     # update
     def update(self, **kwargs):
@@ -367,33 +394,27 @@ class Target(object):
                 + "\n"
             )
             self.prev_example = new_code
-    # def update(self, **kwargs):
-    #     new_code = ""
-    #     for result, code in kwargs["prev"]:
-    #         if (
-    #             result == FResult.SAFE  # TODO(ipip ip)
-    #             and self.filter(code)
-    #             and self.clean_code(code) != self.prev_example
-    #         ):
-    #             self.new_codes.append(self.clean_code(code))
-    #
-    #     if len(self.new_codes):
-    #         new_code = self.new_codes.popleft()
-    #
-    #     if new_code != "" and self.p_strategy != -1:
-    #         self.m_logger.logo(
-    #             "Update prompt\n", level=LEVEL.INFO
-    #         )
-    #         self.prompt = (
-    #             self.initial_prompt
-    #             + self.update_strategy(new_code)
-    #             + self.prompt_used["begin"]
-    #             + "\n"
-    #         )
-    #         self.m_logger.logo(
-    #             "New prompt:\n" + self.prompt, level=LEVEL.INFO
-    #         )
-    #         self.prev_example = new_code
+        else:
+            # add a note that none of the strategies were used
+            statistics_entry = {"strategy": "none", "result": "Nothing was used"}
+
+            if os.path.exists('statistics.json'):
+                with open('statistics.json', 'r+') as file:
+                    try:
+                        data = json.load(file)
+                    except json.JSONDecodeError:
+                        data = {}
+
+                    if "iterations" not in data:
+                        data["iterations"] = []
+
+                    data["iterations"].append(statistics_entry)
+                    file.seek(0)
+                    json.dump(data, file, indent=4)
+            else:
+                with open('statistics.json', 'w') as file:
+                    data = {"iterations": [statistics_entry]}
+                    json.dump(data, file, indent=4)
 
     # validation
     def validate_individual(self, filename) -> (FResult, str):

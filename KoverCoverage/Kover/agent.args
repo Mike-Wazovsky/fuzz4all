@@ -1,2 +1,1 @@
-report.file=KoverCoverage/Kover/kover-kotlin-report.ic
-report.append=true
+report.file=KoverCoverage/run/kover-kotlin-report.ic

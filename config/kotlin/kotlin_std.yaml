@@ -69,7 +69,7 @@ llm:
   # model name according to the HuggingFace model hub
   # note that you can also export your cache such as this:
   # export TRANSFORMERS_CACHE=/blabla/cache/
-  model_name: bigcode/starcoderbase
+  model_name: mini
   # local model folder (absolute path)
   # if not set, the model will be downloaded from the HuggingFace model hub
   # model_folder: /home/username/local_model_repository

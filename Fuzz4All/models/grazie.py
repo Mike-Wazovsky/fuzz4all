@@ -2,23 +2,16 @@ import os
 import random
 import string
 import time
-from typing import Any, Dict, List, Optional, Tuple, Union, Iterator
+from typing import List, Iterator
 
-from grazie.api.client.chat.response import ChatResponseStream
-from grazie.api.client.gateway import AuthType, GrazieApiGatewayClient, GrazieHeaders
+import torch
 from grazie.api.client.chat.prompt import ChatPrompt
+from grazie.api.client.chat.response import ChatResponseStream
 from grazie.api.client.endpoints import GrazieApiGatewayUrls
+from grazie.api.client.gateway import AuthType, GrazieApiGatewayClient
 from grazie.api.client.llm_parameters import LLMParameters
 from grazie.api.client.parameters import Parameters
 from grazie.api.client.profiles import Profile
-
-import torch
-from transformers import (
-    AutoModelForCausalLM,
-    AutoTokenizer,
-    StoppingCriteria,
-    StoppingCriteriaList,
-)
 
 os.environ["TOKENIZERS_PARALLELISM"] = "false"  # disable warning
 EOF_STRINGS = ["<|endoftext|>", "###"]
@@ -45,7 +38,7 @@ class Grazie:
 
     @torch.inference_mode()
     def generate(
-            self, prompt, batch_size=3, temperature=1.0, max_length=512
+            self, prompt, batch_size=10, temperature=1.0, max_length=512
     ) -> List[str]:
         input_str = self.prefix_token + prompt + self.suffix_token
 
@@ -79,12 +72,6 @@ class Grazie:
     def request_grazie(self, request: str, temperature: float):
         response = None
 
-        profile = Profile.OPENAI_GPT_4_TURBO if (random.random() < self.gpt_chance) else self.profile
-        # if profile == Profile.OPENAI_GPT_4_TURBO:
-        #     print("PROFILE USED: GPT_4_TURBO")
-        # elif profile == Profile.GRAZIE_CHAT_LLAMA_V2_13b:
-        #     print("PROFILE USED: LLAMA_V2_13b")
-
 
         while response is None:
             try:
@@ -93,11 +80,10 @@ class Grazie:
                         ChatPrompt()
                         .add_user(request)
                     ),
-                    profile=profile,
-                    # profile=Profile.GRAZIE_CHAT_ZEPHYR_7b,
-                    prompt_id="Fuzz4All-try",
+                    profile=self.profile,
+                    prompt_id="openai-gpt-4o-mini",
                     parameters={
-                        # LLMParameters.Temperature: Parameters.FloatValue(temperature),
+                        LLMParameters.Temperature: Parameters.FloatValue(temperature),
                         LLMParameters.Length: Parameters.IntValue(16192),
                     }
                 )

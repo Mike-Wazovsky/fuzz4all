@@ -76,7 +76,6 @@ def fuzz(
                 continue
             prev = []
             for index, fo in enumerate(fos):
-                # fo = extract_java_code(fo)
                 file_name = os.path.join(output_folder, f"{count}.fuzz")
                 write_to_file(fo, file_name)
                 count += 1
@@ -98,21 +97,6 @@ def fuzz(
     print(f"All time: {all_time} sec")
     print(f"Validation time: {val_time} sec")
 
-
-# TODO(это должно происходить в таргете)
-def add_imports(code: str):
-    with open("Fuzz4All/target/JAVA/imports.txt", "r", encoding="utf-8") as f:
-        imports = f.read()
-    return imports + code
-
-def extract_kotlin_code(text):
-    pattern = re.compile(r'```kotlin\n(.*?)\n```', re.DOTALL)
-    match = pattern.search(text)
-
-    if match:
-        return match.group(1)
-    else:
-        return text
 
 # evaluate against the oracle to discover any potential bugs
 # used after the generation

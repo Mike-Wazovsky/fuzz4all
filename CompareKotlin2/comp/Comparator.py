@@ -1,16 +1,9 @@
 import glob
-import os
-import random
 import time
-from collections import deque
 from enum import Enum
-from typing import Any, Dict, List, Union
 
-import torch
 from rich.progress import track
 
-from Fuzz4All.models.model import make_model
-from Fuzz4All.util.api_request import create_config, request_engine
 from Fuzz4All.util.Logger import LEVEL, Logger
 
 

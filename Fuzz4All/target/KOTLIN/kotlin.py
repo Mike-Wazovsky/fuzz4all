@@ -1,13 +1,7 @@
-import os
 import re
 import subprocess
-import time
-from pathlib import Path
-from re import search
-from typing import List, Union
 
 from Fuzz4All.target.target import FResult, Target
-from Fuzz4All.util.Logger import LEVEL
 from Fuzz4All.util.util import comment_remover
 
 
@@ -86,7 +80,6 @@ class KotlinTarget(Target):
 
         try:
             exit_code = subprocess.run(
-                # f"{self.target_name} --source 22 --enable-preview --target 22 {write_back_name}",
                 f"{self.target_name} {write_back_name} -d out",
                 shell=True,
                 capture_output=True,

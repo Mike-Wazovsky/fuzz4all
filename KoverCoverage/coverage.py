@@ -1,13 +1,19 @@
 import argparse
-import json
+import glob
 import os
-import shutil
 import subprocess
-
-import matplotlib.pyplot as plt
-import xmltodict
+import time
 
 from KoverCoverage.kotlin_coverage import KotlinKover
+from helper import (
+    parse_xml,
+    save_ic,
+    move_ic,
+    save_experiment_state,
+    restore_experiment_state,
+    check_ic,
+    build_graphs, prepare, cleanup, delete, create_directory, merge_ic
+)
 
 
 def main():
@@ -28,9 +34,9 @@ def main():
 
 
 def coverage(compiler: str, source: str, output: str, scope: int, size: int, restart: bool):
-    global iter
-    target_dir = "KoverCoverage/Kover/kotlinc_tmp"
-    json_dir = "KoverCoverage/Kover/experiment.json"
+    global it
+    target_dir = "KoverCoverage/run/kotlinc_tmp"
+    json_file = os.path.join(output, "experiment.json")
     kotlinc_path = os.path.join(target_dir, "bin/kotlinc")
     target = KotlinKover(kotlinc_path)
     graphs = {
@@ -39,90 +45,68 @@ def coverage(compiler: str, source: str, output: str, scope: int, size: int, res
         "LINE": [0],
         "METHOD": [0],
         "CLASS": [0]
-    } if not restart else restore_experiment_state('graphs', json_dir)
-    start_iter = 0 if not restart else restore_experiment_state('iteration', json_dir)
-    x_axis = [0] if not restart else restore_experiment_state('x_axis', json_dir)
+    } if not restart else restore_experiment_state('graphs', json_file)
+    start_iter = 0 if not restart else restore_experiment_state('iteration', json_file)
+    x_axis = [0] if not restart else restore_experiment_state('x_axis', json_file)
 
     try:
         # добавить опцию JAVA_OPT
-        # os.environ["JAVA_OPTS"] = "-javaagent:KoverCoverage/Kover/kover-jvm-agent-0.8.3.jar=file:KoverCoverage/Kover/agent.args"
         os.environ["JAVA_OPTS"] = \
-        "-javaagent:KoverCoverage/Kover/sources/kover-jvm-agent-0.8.4-SNAPSHOT.jar=file:KoverCoverage/Kover/agent.args"
+            ("-javaagent:KoverCoverage/Kover/sources/kover-jvm-agent-0.8.4-SNAPSHOT.jar=file:KoverCoverage/Kover/agent"
+             ".args")
 
         # создать копию kotlin target
-        if not restart:
-            delete("KoverCoverage/Kover/kover-kotlin-report.ic")
-            delete("KoverCoverage/Kover/data.xml")
-            delete(target_dir)
-
-            if not os.path.isdir(compiler):
-                print(f"given '{compiler}' doesn't exist")
-            else:
-                try:
-                    shutil.copytree(compiler, target_dir)
-                except Exception as e:
-                    print(f"Error occurred during copying of target: {e}")
+        prepare(compiler, target_dir, json_file, output)
 
         # Прогнать запуски kotlin target
-        for iter in range(start_iter, size):
-            if iter % scope == 0 and iter > x_axis[-1]:
-                res = read_coverage(target_dir)
+        for it in range(start_iter, size):
+            if (it % scope == 0 or it == size - 1) and it > x_axis[-1]:
+                res = read_coverage(target_dir, output, it)
                 for key, value in res.items():
                     graphs[key].append(int(value))
-                x_axis.append(iter)
-                save_ic(output, iter)
-            save_experiment_state(iter, graphs, x_axis, json_dir)
+                x_axis.append(it)
+            save_experiment_state(it, graphs, x_axis, json_file)
 
-            # file_path = os.path.join(source, f"{9999}.fuzz")
-            file_path = os.path.join(source, f"{iter}.fuzz")
-            print(f"run {iter}.fuzz")
-            # if (iter == 6):
-            #     raise Exception(f"RANDOM ERROR!!!!!!!")
-            target.run_individual(file_path)
+            file_path = os.path.join(source, f"{it}.fuzz")
 
-        # Снять результат
-        res = read_coverage(target_dir)
-        for key, value in res.items():
-            graphs[key].append(int(value))
-        x_axis.append(iter)
-        save_ic(output, iter)
-        save_experiment_state(iter, graphs, x_axis, json_dir)
+            print(f"run {it}.fuzz")
+
+            run_individual(target, file_path, it)
+            save_ic(output)
+            merge_ic(output)
 
         # Построить графики
-        for key, values in graphs.items():
-            fig, ax = plt.subplots()
-            ax.plot(x_axis, values, label=key)
-
-            ax.set_xlabel('Iteration')
-            ax.set_ylabel(f'{key} Coverage')
-            ax.legend()
-
-            plt.show()
+        build_graphs(graphs, x_axis)
 
         # убрать опцию JAVA_OPT + удалить директорию kotlinc
-        save_experiment_state(iter, graphs, x_axis, json_dir)
-        os.environ["JAVA_OPTS"] = ""
-        delete(target_dir)
-        delete("KoverCoverage/Kover/kover-kotlin-report.ic")
-        delete("KoverCoverage/Kover/data.xml")
+        save_experiment_state(it, graphs, x_axis, json_file)
+        cleanup(target_dir)
     except Exception as e:
-        # TODO(save results)
-        save_experiment_state(iter, graphs, x_axis, json_dir)
+        save_experiment_state(it, graphs, x_axis, json_file)
+        cleanup(target_dir)
 
-        os.environ["JAVA_OPTS"] = ""
         raise e
 
 
-def read_coverage(target_dir: str) -> dict[str, int]:
+def run_individual(target, file_path, num):
+    target.run_individual(file_path)
+    if not os.path.isfile("KoverCoverage/run/kover-kotlin-report.ic"):
+        raise FileNotFoundError(f"Файл KoverCoverage/run/kover-kotlin-report.ic не найден.")
+
+    # проверить, всё ли норм, если нет, то вернуть backup версию и запуститься заново
+
+
+def read_coverage(target_dir: str, output: str, it: int) -> dict[str, int]:
     print(f"run xml")
-    xml_path = "KoverCoverage/Kover/data.xml"
-    html_path = "html_dir_check"
+    xml_path = "KoverCoverage/run/data.xml"
+
     command = [
         "java",
         "-jar",
         "KoverCoverage/Kover/sources/kover-cli-0.8.4-SNAPSHOT.jar",
         "report",
-        "KoverCoverage/Kover/kover-kotlin-report.ic",
+        # "KoverCoverage/run/kover-kotlin-report.ic",
+        os.path.join(output, "merged-kover-kotlin-report.ic"),
         "--classfiles",
         os.path.join(target_dir, "lib/kotlin-compiler.jar"),
         "--src",
@@ -131,85 +115,20 @@ def read_coverage(target_dir: str) -> dict[str, int]:
         xml_path
     ]
 
-    command_html = [
-        "java",
-        "-jar",
-        "KoverCoverage/Kover/sources/kover-cli-0.8.4-SNAPSHOT.jar",
-        "report",
-        "KoverCoverage/Kover/kover-kotlin-report.ic",
-        "--classfiles",
-        os.path.join(target_dir, "lib/kotlin-compiler.jar"),
-        "--src",
-        "src/main/kotlin",
-        "--html",
-        html_path
-    ]
-
     try:
+        start_time = time.time()  # Record the start time
+
         subprocess.run(command, check=True, capture_output=True, text=True)
-        subprocess.run(command_html, check=True, capture_output=True, text=True)
+
+        end_time = time.time()  # Record the end time
+        elapsed_time = end_time - start_time  # Calculate elapsed time
+
+        print(f"Command executed in {elapsed_time:.2f} seconds")
     except subprocess.CalledProcessError as e:
         print("Произошла ошибка при выполнении команды:")
         print(e.stderr)
 
     return parse_xml(xml_path)
-
-
-def parse_xml(xml_path) -> dict[str, int]:
-    res = {}
-    with open(xml_path) as file:
-        data = xmltodict.parse(file.read())
-        res = {x['@type']: x['@covered'] for x in data['report']['counter']}
-    print(res)
-    return res
-
-
-def save_ic(output, iter):
-    command = [
-        "mv",
-        "KoverCoverage/Kover/kover-kotlin-report.ic",
-        os.path.join(output, f'kover-kotlin-report-{iter}.ic')
-    ]
-
-    try:
-        result = subprocess.run(command, check=True, capture_output=True, text=True)
-    except subprocess.CalledProcessError as e:
-        print("Произошла ошибка при выполнении команды:")
-        print(e.stderr)
-
-
-def delete(path: str):
-    if os.path.exists(path):
-        try:
-            shutil.rmtree(path)
-        except Exception as e:
-            print(f"Произошла ошибка при удалении директории: {e}")
-
-
-def save_experiment_state(iteration, graphs, x_axis, file_name='experiment.json'):
-    state = {
-        'iteration': iteration,
-        'graphs': dict(graphs),
-        'x_axis': x_axis
-    }
-    with open(file_name, 'w') as f:
-        json.dump(state, f, indent=4)
-
-
-def load_experiment_state(file_name='experiment.json'):
-    if os.path.exists(file_name):
-        with open(file_name, 'r') as f:
-            return json.load(f)
-    else:
-        raise FileNotFoundError(f"{file_name} not found")
-
-
-def restore_experiment_state(param: str, json_dir: str):
-    try:
-        state = load_experiment_state(json_dir)
-        return state[param]
-    except FileNotFoundError as e:
-        print(e)
 
 
 if __name__ == "__main__":

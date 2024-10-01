@@ -1,4 +1,4 @@
-from typing import Any, Dict, List, Optional, Tuple, Union
+from typing import Any, Dict
 
 from Fuzz4All.target.C.C import CTarget
 from Fuzz4All.target.CPP.CPP import CPPTarget

@@ -119,12 +119,9 @@ class KotlinComp():
             return FResult.ERROR, "Error"
 
     def validate_all(self):
-        print("VALIDATE ALL")
-        print(self.folder)
         for fuzz_output in track(
             glob.glob(self.folder + "/*.fuzz"),
             description="Validating",
         ):
-            print("VALIDATE")
             f_result, message = self.validate_individual(fuzz_output)
             self.parse_validation_message(f_result, message, fuzz_output)
